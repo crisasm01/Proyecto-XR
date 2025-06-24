@@ -3,19 +3,20 @@ using UnityEngine.InputSystem;
 
 public class SimpleCarController : MonoBehaviour
 {
+    [Header("Parámetros de movimiento")]
     public float maxSpeed = 20f;
     public float accelerationForce = 10f;
     public float turnSpeed = 50f;
     public float brakingForce = 15f;
     public float dragFactor = 0.95f;
 
-    private float currentSpeed;
-    private Vector2 moveInput;
+    private float currentSpeed = 0f;
+    private float steerInput = 0f;
+    private float forwardInput = 0f;
+    private float reverseInput = 0f;
 
-    // Reference to the InputActionAsset-generated class
     private PlayerControls controls;
 
-    // Rigidbody used for physics
     private Rigidbody rb;
 
     private void Awake()
@@ -26,14 +27,21 @@ public class SimpleCarController : MonoBehaviour
 
     private void InitializeControls()
     {
-        if (controls == null)
-        {
-            controls = new PlayerControls();
+        if (controls != null) return;
 
-            // Bind the Move action
-            controls.Car.Move.performed += ctx => moveInput = ctx.ReadValue<Vector2>();
-            controls.Car.Move.canceled += ctx => moveInput = Vector2.zero;
-        }
+        controls = new PlayerControls();
+
+
+        controls.Car.Steer.performed += ctx => steerInput = ctx.ReadValue<float>();
+        controls.Car.Steer.canceled += ctx => steerInput = 0f;
+
+
+        controls.Car.Reverse.performed += ctx => forwardInput = ctx.ReadValue<float>();
+        controls.Car.Reverse.canceled += ctx => forwardInput = 0f;
+
+
+        controls.Car.Forward.performed += ctx => reverseInput = ctx.ReadValue<float>();
+        controls.Car.Forward.canceled += ctx => reverseInput = 0f;
     }
 
     private void OnEnable()
@@ -45,41 +53,55 @@ public class SimpleCarController : MonoBehaviour
     private void OnDisable()
     {
         if (controls != null)
-        {
             controls.Car.Disable();
-        }
     }
 
     private void FixedUpdate()
     {   
-        // Handle acceleration and deceleration
-        float targetSpeed = moveInput.y;
-        
-        if (targetSpeed > 0)
+
+
+        float target = forwardInput - reverseInput;
+
+        if (target > 0f)
         {
-            // Accelerating forward
-            currentSpeed = Mathf.MoveTowards(currentSpeed, maxSpeed * targetSpeed, accelerationForce * Time.deltaTime);
+            currentSpeed = Mathf.MoveTowards(
+                currentSpeed,
+                maxSpeed * target,
+                accelerationForce * Time.fixedDeltaTime
+            );
         }
-        else if (targetSpeed < 0)
+        else if (target < 0f)
         {
-            // Braking/Reversing
-            currentSpeed = Mathf.MoveTowards(currentSpeed, maxSpeed * targetSpeed, brakingForce * Time.deltaTime);
+            currentSpeed = Mathf.MoveTowards(
+                currentSpeed,
+                maxSpeed * target,
+                brakingForce * Time.fixedDeltaTime
+            );
         }
         else
         {
-            // No input - apply drag
+
             currentSpeed *= dragFactor;
         }
 
-        Vector3 forwardVelocity = transform.forward * currentSpeed;
-        rb.linearVelocity = new Vector3(forwardVelocity.x, rb.linearVelocity.y, forwardVelocity.z);
+        Vector3 forwardVel = transform.forward * currentSpeed;
+        rb.linearVelocity = new Vector3(
+            forwardVel.x,
+            rb.linearVelocity.y,
+            forwardVel.z
+        );
+
 
         if (Mathf.Abs(currentSpeed) > 0.1f)
         {
-            float turn = moveInput.x * turnSpeed * Time.fixedDeltaTime * Mathf.Sign(currentSpeed);
-            Quaternion turnOffset = Quaternion.Euler(0f, turn, 0f);
+
+            float signedTurn = steerInput
+                               * turnSpeed
+                               * Time.fixedDeltaTime
+                               * Mathf.Sign(currentSpeed);
+
+            Quaternion turnOffset = Quaternion.Euler(0f, signedTurn, 0f);
             rb.MoveRotation(rb.rotation * turnOffset);
         }
-
     }
 }
